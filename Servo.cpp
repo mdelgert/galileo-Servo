@@ -1,6 +1,5 @@
 #include "Servo.h"
 #include <trace.h>
-#define MIKAL 1
 
 uint8_t Servo::counter = 0;   // init the counter here.. static...
 
