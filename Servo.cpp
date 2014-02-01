@@ -19,12 +19,22 @@ Servo::Servo()
 
 void Servo::set48hz()
 {
-  this->is188hz = false;
+  this->frequencyDivisor = FREQUENCY_DIVISOR_LO_RES;
 }
 
 void Servo::set188hz()
 {
-  this->is188hz = true;
+  this->frequencyDivisor = FREQUENCY_DIVISOR_HI_RES;
+}
+
+// sets cypress angle resolution from 0 = low res/high compatibility to 7 = high res/low compatibility
+void Servo::setResolution(int res)
+{
+  this->frequencyDivisor = FREQUENCY_DIVISOR_LO_RES - res;
+  if (this->frequencyDivisor > FREQUENCY_DIVISOR_LO_RES)
+    this->frequencyDivisor = FREQUENCY_DIVISOR_LO_RES;
+  if (this->frequencyDivisor < FREQUENCY_DIVISOR_HI_RES)
+    this->frequencyDivisor = FREQUENCY_DIVISOR_HI_RES;
 }
 
 uint8_t Servo::attach(int16_t pin)
@@ -47,15 +57,15 @@ uint8_t Servo::attach(int pin, int min, int max)
   for (list_index = 0; list_index < sizeof(pinData)/sizeof(servoPinData_t); list_index++) 
   {
     if (pinData[list_index].pin == pin) 
-    { 
-        is_valid_pin = true;
-        break;
+    {
+      is_valid_pin = true;
+      break;
     }
   }
 
   if (!is_valid_pin)
   {
-    trace_error("invalid pin");    
+    trace_error("invalid pin");
     return INVALID_SERVO;
   }
 
@@ -66,7 +76,7 @@ uint8_t Servo::attach(int pin, int min, int max)
     this->pin = pin;
     this->min = min;
     this->max = max;
-    this->is188hz = false;
+    this->frequencyDivisor = FREQUENCY_DIVISOR_HI_RES;
     this->isAttached = true;
 
     pinMode(pin, OUTPUT);
@@ -84,7 +94,7 @@ uint8_t Servo::attach(int pin, int min, int max)
    41.7Hz that means 23.98 ms.
    However the cypress does not offer a good angle
    resolution on this frequency and the user
-   has option to operates the servos in 188Hz */
+   has option to operates the servos in 184Hz */
 
 void Servo::prepare_pin(uint8_t pin)
 {
@@ -130,10 +140,7 @@ void Servo::prepare_pin(uint8_t pin)
   Wire.beginTransmission(CYPRESS_I2C_ADDRESS);
   Wire.write(0x2C);
 
-  if (this->is188hz)
-    Wire.write(0x02);
-  else
-    Wire.write(0x09);
+  Wire.write(this->frequencyDivisor);
 
   Wire.endTransmission();
 }
@@ -158,7 +165,8 @@ byte Servo::transform_cypress_duty_cycle_byte(int microsecs)
      
      */
  
-  int freq =  (this->is188hz) ? 188:43.4;
+  //int freq =  (this->is188hz) ? 188:43.4;
+  int freq = (int)(367.7 / this->frequencyDivisor);
   int max_byte = MAX_PULSE_WIDTH*255*freq/1000000L;
 
   byte b_duty = map(microsecs, 0, MAX_PULSE_WIDTH, 0, max_byte);
@@ -194,7 +202,7 @@ void Servo::writeMicroseconds(int microsecs)
 void Servo::write(int val)
 {
   // according to Arduino reference lib, if this angle will
-  // be bigger than 200, it should be considered as microsenconds
+  // be bigger than 200, it should be considered as microseconds
 
   if (val < MIN_PULSE_WIDTH)
   {
@@ -234,7 +242,7 @@ void Servo::detach()
 {
   if (this->isAttached)
   {
-    this->isAttached = false;        
+    this->isAttached = false;
     pinMode(this->pin, OUTPUT);
     this->lastByteInDuty = -1;
   }
